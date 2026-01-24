@@ -8,7 +8,7 @@ Tracks associated with multiple genres are proportionally weighted to avoid over
 Stacked area charts effectively convey changes in composition and aggregate volume over time, enabling users to identify long-term genre trends and shifts in dominance.
 ## Analytical purpose
 To provide a high-level overview of how genre popularity evolves across years and to reveal macro-level temporal patterns before deeper exploration.
-# iew 2 — Popularity vs. Artist Scale (Scatter Tiles)
+# View 2 — Popularity vs. Artist Scale (Scatter Tiles)
 This view maps track popularity against artist follower counts (log scale), with color encoding track duration. Only the top 500 most popular tracks are shown to reduce visual clutter.
 ## Design rationale
 A scatter-based representation supports multi-variable relationship analysis, while logarithmic scaling improves readability across large follower ranges. Color encoding enables an additional quantitative dimension without introducing extra axes.
