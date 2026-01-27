@@ -347,15 +347,70 @@ svg{ display:block; }
   height: 40px;
   border-radius: 12px;
   border: 1px solid rgba(15,23,42,0.12);
-  background: rgba(253, 253, 253, 0.92);
+  background: rgba(67, 65, 65, 0.92);
   cursor: pointer;
 }
 
 .modalClose:hover{
-  background: rgb(232, 231, 231);
+  background: rgb(58, 57, 57);
 }
 
 
 .modalHeader{
   padding-right: 56px; 
+}
+
+
+.bannerInner{
+  padding: 14px 18px;             
+}
+
+.bannerInner h1{
+  margin: 0;
+  line-height: 1.15;
+}
+
+.bannerMeta{
+  margin-top: 8px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 12px;
+}
+
+.bannerMeta p{
+  margin:0;
+  color: rgba(16, 17, 17, 0.62);
+  padding-top: 10px;
+}
+
+
+.workspaceBadge{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+
+  padding:4px 10px;               
+  border-radius:999px;
+
+  background: rgba(15,23,42,0.05); 
+  border: 1px solid rgba(15,23,42,0.08);
+  backdrop-filter: blur(6px);
+
+  color: rgba(18, 17, 17, 0.55);
+  font-size: 12px;
+  line-height: 1;
+  box-shadow: none;               
+}
+
+.workspaceDot{
+  width:6px;
+  height:6px;
+  border-radius:999px;
+  background: rgba(15,23,42,0.35);
+}
+
+.workspaceLabel{
+  white-space:nowrap;
+  letter-spacing: 0.2px;
 }

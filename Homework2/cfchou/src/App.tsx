@@ -10,7 +10,7 @@ type Row = {
   artist_popularity: number;
   artist_followers: number;
 
-  // View 1
+
   artist_genres?: string;
 
   album_type: string;
@@ -19,6 +19,21 @@ type Row = {
 };
 
 const DATA_URL = new URL("../data/spotify_dataclean.csv", import.meta.url).toString();
+ const MORANDI_SEQ = [
+  "#c6cacef6", 
+  "#6c7c9c", 
+  "#8374ae", 
+  "#695b99", 
+  "#3b2c6f", 
+];
+
+
+  const morandiInterp = d3.scaleLinear<string>()
+  .domain(d3.range(0, MORANDI_SEQ.length).map(i => i / (MORANDI_SEQ.length - 1)))
+  .range(MORANDI_SEQ)
+  .interpolate(d3.interpolateRgb);
+
+
 
 function parseYear(dateStr: string | undefined) {
   if (!dateStr) return NaN;
@@ -48,14 +63,14 @@ export default function App() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // View 2 legend domain (Top 500, clipped range; no extreme outliers)
+
   const [v2LegendMin, setV2LegendMin] = useState(0);
   const [v2LegendMax, setV2LegendMax] = useState(1);
 
-  // fullscreen modal
+
   const [activeView, setActiveView] = useState<ActiveView>(null);
 
-  // containers
+
   const v1Ref = useRef<HTMLDivElement>(null);
   const v2Ref = useRef<HTMLDivElement>(null);
   const v3Ref = useRef<HTMLDivElement>(null);
@@ -64,15 +79,16 @@ export default function App() {
   const v2Size = useResizeObserver(v2Ref);
   const v3Size = useResizeObserver(v3Ref);
 
-  // svgs
+  
   const v1SvgRef = useRef<SVGSVGElement>(null);
   const v2SvgRef = useRef<SVGSVGElement>(null);
   const v3SvgRef = useRef<SVGSVGElement>(null);
 
-  // modal svg
+
   const modalBodyRef = useRef<HTMLDivElement>(null);
   const modalSize = useResizeObserver(modalBodyRef);
   const modalSvgRef = useRef<SVGSVGElement>(null);
+  
 
   useEffect(() => {
     (async () => {
@@ -133,7 +149,7 @@ export default function App() {
 
     const rowsInRange = rows.filter((d) => d.year >= yearExtent[0] && d.year <= yearExtent[1]);
 
-    // ---------- View 1: Top 10 genres (weighted split) ----------
+
     const genreCounts = new Map<string, number>();
     for (const r of rowsInRange) {
       const gs = parseGenres(r.artist_genres);
@@ -171,7 +187,7 @@ export default function App() {
       for (const g of topGenres) byYearGenre.push({ year: y, genre: g, count: counts.get(g) ?? 0 });
     }
 
-    // ---------- View 3: popularity distribution by album_type ----------
+
     const byTypePop = d3
       .rollups(
         rowsInRange,
@@ -194,7 +210,7 @@ export default function App() {
     return { byYearGenre, topGenres, yearExtent, byTypePop, genreColorMap };
   }, [rows]);
 
-  // draw charts (dashboard)
+
   useEffect(() => {
     if (loading) return;
     if (!v1SvgRef.current) return;
@@ -221,7 +237,7 @@ export default function App() {
     drawBoxplotPopularity(v3SvgRef.current, v3Size, byTypePop);
   }, [loading, v3Size.width, v3Size.height, byTypePop]);
 
-  // ✅ draw charts (modal fullscreen): use ResizeObserver size (fix aspect/0-size issue)
+ 
   useEffect(() => {
     if (!activeView) return;
     if (loading) return;
@@ -233,7 +249,7 @@ export default function App() {
     let raf = 0;
 
     const draw = () => {
-      // Prefer ResizeObserver size; fallback to DOM rect
+
       const w1 = modalSize.width ?? 0;
       const h1 = modalSize.height ?? 0;
 
@@ -254,7 +270,7 @@ export default function App() {
       }
     };
 
-    // ✅ wait for modal layout done
+
     raf = requestAnimationFrame(() => requestAnimationFrame(draw));
 
     return () => cancelAnimationFrame(raf);
@@ -271,18 +287,17 @@ export default function App() {
     byTypePop,
   ]);
 
-  const genreColor = (g: string) => genreColorMap.get(g) ?? "#999";
-
+ 
   const modalTitle =
     activeView === "v1"
-      ? "View 1 (Overview): Top 10 genres throughout the years (2009–2025)"
+      ? "Visualization 1: Top 10 genres throughout the years (2009–2025)"
       : activeView === "v2"
-      ? "View 2 (Focus): Popularity vs artist followers"
+      ? "Visualization 2: Popularity vs artist followers"
       : activeView === "v3"
-      ? "View 3 (Detail): Popularity distribution by album type"
+      ? "Visualization 3: Popularity distribution by album type"
       : "";
 
-  // ✅ V1 legend reused in modal (fix: legend missing in fullscreen)
+  const genreColor = (g: string) => genreColorMap.get(g) ?? "#999";
   const V1Legend = (
     <div className="legendRow legendRowModal" aria-label="Top genres legend (modal)">
       {topGenres.map((g) => (
@@ -296,20 +311,30 @@ export default function App() {
 
   return (
     <div className="dashboard">
-      {/* ✅ full-width banner header (no card, no badges) */}
+      {}
       <div className="banner">
         <div className="bannerInner">
-          <h1>Spotify Global Music Dataset Dashboard</h1>
-          <p>2009–2025 · Overview → Focus → Detail. Hover a view to preview; click to open fullscreen.</p>
+          <h1>2019-2025 Spotify Global Music Dataset Dashboard</h1>
+
+          <div className="bannerMeta">
+            <p>Hover/Click for details!</p>
+
+            <div className="workspaceBadge" aria-label="Workspace">
+              <span className="workspaceDot" aria-hidden="true" />
+              <span className="workspaceLabel">chifang&apos;s workspace</span>
+            </div>
+          </div>
         </div>
       </div>
+
+
 
       <div className="grid">
         <div className="rowTop">
           <div className="card zoomCard" onClick={() => setActiveView("v1")} role="button" tabIndex={0}>
             <div className="cardHeader v1Header">
               <div className="v1Text">
-                <p className="title">View 1 (Overview): Top 10 genres throughout the years (2009–2025)</p>
+                <p className="title">Visualization 1: Top 10 genres throughout the years (2009–2025)</p>
                 <p className="subtitle">
                   Stacked area = genre composition over time · Y uses weighted track counts (multi-genre tracks split).
                 </p>
@@ -335,7 +360,7 @@ export default function App() {
           <div className="card zoomCard" onClick={() => setActiveView("v2")} role="button" tabIndex={0}>
             <div className="cardHeader v2Header">
               <div className="v2Text">
-                <p className="title">View 2 (Focus): Popularity vs artist followers</p>
+                <p className="title">Visualization 2: Popularity vs artist followers</p>
                 <p className="subtitle">Top 500 tracks by popularity · Color = duration (minutes).</p>
               </div>
 
@@ -344,7 +369,7 @@ export default function App() {
                   <defs>
                     <linearGradient id="dur-grad-header" x1="0%" x2="100%" y1="0%" y2="0%">
                       {d3.range(0, 1.0001, 0.1).map((t) => (
-                        <stop key={t} offset={`${t * 100}%`} stopColor={d3.interpolateTurbo(t)} />
+                        <stop key={t} offset={`${t * 100}%`} stopColor={morandiInterp(t)} />
                       ))}
                     </linearGradient>
                   </defs>
@@ -372,8 +397,8 @@ export default function App() {
 
           <div className="card zoomCard" onClick={() => setActiveView("v3")} role="button" tabIndex={0}>
             <div className="cardHeader">
-              <p className="title">View 3 (Detail): Popularity distribution by album type</p>
-              <p className="subtitle">Box = median + IQR · Whiskers = 1.5×IQR · Dots = deterministic sample (stable)</p>
+              <p className="title">Visualization 3: Popularity distribution by album type</p>
+              <p className="subtitle">Box = median + IQR · Whiskers = 1.5×IQR · Dots = deterministic sample</p>
             </div>
             <div className="cardBody" ref={v3Ref}>
               <svg ref={v3SvgRef} />
@@ -382,18 +407,18 @@ export default function App() {
         </div>
       </div>
 
-      {/* ✅ fullscreen modal */}
+      {}
       {activeView && (
         <div className="modalOverlay" onMouseDown={() => setActiveView(null)}>
           <div className="modalPanel" onMouseDown={(e) => e.stopPropagation()}>
-            {/* ✅ FIX: show V1 legend inside modal header */}
+            {}
             <div className="modalHeader">
               <div className="modalHeaderLeft">
                 <div className="modalTitle">{modalTitle}</div>
                 {activeView === "v1" && V1Legend}
               </div>
 
-              {/* if v2, show legend in modal too */}
+              {}
               {activeView === "v2" && (
                 <div className="modalLegend">
                   <svg width={260} height={44} viewBox="0 0 260 44" role="img">
@@ -401,7 +426,7 @@ export default function App() {
                     <defs>
                       <linearGradient id="dur-grad-modal" x1="0%" x2="100%" y1="0%" y2="0%">
                         {d3.range(0, 1.0001, 0.1).map((t) => (
-                          <stop key={t} offset={`${t * 100}%`} stopColor={d3.interpolateTurbo(t)} />
+                          <stop key={t} offset={`${t * 100}%`} stopColor={morandiInterp(t)} />
                         ))}
                       </linearGradient>
                     </defs>
@@ -439,7 +464,7 @@ export default function App() {
   );
 }
 
-/** ------------------ CHARTS ------------------ **/
+
 
 function drawStackedAreaGenres(
   svgEl: SVGSVGElement,
@@ -503,8 +528,7 @@ function drawStackedAreaGenres(
     .attr("fill", (d: any) => color(d.key))
     .attr("opacity", 0.9);
 
-  // ---------------- Tooltip (View 1) ----------------
-  // year -> (genre -> count)
+
   const yearToCounts = new Map<number, Map<string, number>>();
   for (const yy of years) yearToCounts.set(yy, new Map(keys.map((k) => [k, 0])));
   for (const d of byYearGenre) {
@@ -580,7 +604,7 @@ function drawStackedAreaGenres(
     .on("mousemove", showTipV1)
     .on("mouseleave", hideTipV1);
 
-  // axes
+
   g.append("g")
     .attr("transform", `translate(0,${innerH})`)
     .call(d3.axisBottom(x).ticks(9).tickFormat(d3.format("d") as any))
@@ -609,6 +633,9 @@ function drawStackedAreaGenres(
     .attr("font-size", 12)
     .text("Tracks (weighted count)");
 }
+
+
+
 
 function drawScatterTilesTopN(
   svgEl: SVGSVGElement,
@@ -674,7 +701,17 @@ function drawScatterTilesTopN(
     return (vv - legendMin) / (legendMax - legendMin);
   };
 
-  const color = (v: number) => d3.interpolateTurbo(durT(v));
+  const morandiScale = d3
+  .scaleLinear<string>()
+  .domain(d3.range(0, MORANDI_SEQ.length).map(i => i / (MORANDI_SEQ.length - 1)))
+  .range(MORANDI_SEQ)
+  .interpolate(d3.interpolateRgb);
+
+const color = (v: number) => {
+  const t = durT(v);       
+  return morandiScale(t);
+};
+
 
   const xTicks = [1e5, 3e5, 1e6, 3e6, 1e7, 3e7, 1e8, 3e8];
 
@@ -697,8 +734,8 @@ function drawScatterTilesTopN(
   function showTip(evt: any, d: Row) {
     const lines = [
       `${d.artist_name} — ${d.track_name}`,
-      `Popularity: ${d.track_popularity.toFixed(0)} (0–100)`,
-      `Followers: ${d3.format(".2s")(d.artist_followers)} (count)`,
+      `Popularity: ${d.track_popularity.toFixed(0)}`,
+      `Followers: ${d3.format(".2s")(d.artist_followers)}`,
       `Duration: ${d.track_duration_min.toFixed(2)} min`,
     ];
 
@@ -725,22 +762,23 @@ function drawScatterTilesTopN(
   const tile = 10;
   const half = tile / 2;
 
+  const r = 4.2;
+
   g.append("g")
-    .selectAll("rect.tile")
+    .selectAll("circle.dot")
     .data(data)
-    .join("rect")
-    .attr("class", "tile")
-    .attr("x", (d) => x(Math.max(1, d.artist_followers)) - half)
-    .attr("y", (d) => y(d.track_popularity) - half)
-    .attr("width", tile)
-    .attr("height", tile)
+    .join("circle")
+    .attr("class", "dot")
+    .attr("cx", (d) => x(Math.max(1, d.artist_followers)))
+    .attr("cy", (d) => y(d.track_popularity))
+    .attr("r", r)
     .attr("fill", (d) => color(d.track_duration_min))
-    .attr("opacity", 0.78)
-    .attr("stroke", "rgba(255,255,255,0.55)")
-    .attr("stroke-width", 0.7)
-    .attr("shape-rendering", "crispEdges")
+    .attr("opacity", 0.82)
+    .attr("stroke", "rgba(255,255,255,0.85)")
+    .attr("stroke-width", 1.1)
     .on("mousemove", (evt, d) => showTip(evt, d))
     .on("mouseleave", hideTip);
+
 
   g.append("text")
     .attr("x", innerW / 2)
@@ -748,7 +786,7 @@ function drawScatterTilesTopN(
     .attr("text-anchor", "middle")
     .attr("fill", "rgba(15,23,42,0.7)")
     .attr("font-size", 12)
-    .text("Artist followers (count, log scale)");
+    .text("Artist followers (log scale)");
 
   g.append("text")
     .attr("x", -innerH / 2)
@@ -782,7 +820,7 @@ function drawBoxplotPopularity(
 
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
-  // ✅ remove "other"
+
   const order = ["album", "single", "compilation"];
   const byType = new Map(stats.map((d) => [d.album_type, d]));
   const data = order
@@ -824,7 +862,7 @@ function drawBoxplotPopularity(
 
   const col = d3.scaleOrdinal<string, string>().domain(order).range(["#7E8A98", "#A7B48E", "#B79A8B"]);
 
-  // tooltip
+
   const tip = svg.append("g").style("pointer-events", "none").style("display", "none");
   tip.append("rect").attr("rx", 10).attr("fill", "rgba(255,255,255,0.96)").attr("stroke", "rgba(15,23,42,0.18)");
   const tipText = tip.append("text").attr("font-size", 12).attr("fill", "rgba(15,23,42,0.85)");
@@ -858,7 +896,7 @@ function drawBoxplotPopularity(
     tip.style("display", "none");
   }
 
-  // ✅ deterministic jitter: stable across refresh
+
   function hash01(str: string) {
     let h = 2166136261;
     for (let i = 0; i < str.length; i++) {
@@ -880,7 +918,7 @@ function drawBoxplotPopularity(
     const lo = d3.min(v.filter((x) => x >= loFence)) ?? v[0];
     const hi = d3.max(v.filter((x) => x <= hiFence)) ?? v[v.length - 1];
 
-    // deterministic sample (reduce overplot)
+
     const maxPts = 180;
     const step = Math.max(1, Math.floor(v.length / maxPts));
     const sample = v.filter((_, i) => i % step === 0);
@@ -888,7 +926,7 @@ function drawBoxplotPopularity(
     return { album_type: d.album_type, n: v.length, q1, med, q3, lo, hi, sample };
   });
 
-  // jitter points
+
   const jitterG = g.append("g").attr("opacity", 0.22);
 
   summary.forEach((d) => {
@@ -909,7 +947,7 @@ function drawBoxplotPopularity(
       .attr("fill", col(d.album_type));
   });
 
-  // box + whiskers
+
   const boxW = Math.max(18, (x.bandwidth() ?? 40) * 0.72);
   const half = boxW / 2;
 
