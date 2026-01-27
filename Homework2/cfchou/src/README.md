@@ -1,5 +1,4 @@
 # Spotify Music Trends Dashboard
-The dashboard follows an Overview–Focus–Detail analytical workflow and supports exploratory analysis through responsive layouts and interactive tooltips.
 ## View 1 — Genre Evolution Over Time (Stacked Area)
 This view visualizes the distribution of the top 10 music genres using a stacked area chart.
 Tracks associated with multiple genres are proportionally weighted to avoid over-counting.
