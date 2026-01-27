@@ -346,13 +346,13 @@ svg{ display:block; }
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  border: 1px solid rgba(15,23,42,0.12);
-  background: rgba(67, 65, 65, 0.92);
+  border: 1px solid rgba(190, 191, 193, 0.12);
+  background: rgba(224, 221, 221, 0.92);
   cursor: pointer;
 }
 
 .modalClose:hover{
-  background: rgb(58, 57, 57);
+  background: rgb(93, 92, 92);
 }
 
 
@@ -362,7 +362,7 @@ svg{ display:block; }
 
 
 .bannerInner{
-  padding: 14px 18px;             
+  padding: 14px 18px 1px;             
 }
 
 .bannerInner h1{
@@ -381,7 +381,7 @@ svg{ display:block; }
 .bannerMeta p{
   margin:0;
   color: rgba(16, 17, 17, 0.62);
-  padding-top: 10px;
+  padding-top: 6px;
 }
 
 

@@ -7,12 +7,13 @@ Stacked area charts effectively convey changes in composition and aggregate volu
 ### Analytical purpose
 To provide a high-level overview of how genre popularity evolves across years and to reveal macro-level temporal patterns before deeper exploration.
 Also, considering hw3's interactive extension, the chart is easy to do more.
-## View 2 — Popularity vs. Artist Scale (Scatter Tiles)
+## View 2 — Popularity vs. Artist Scale (Scatter plot)
 This view maps track popularity against artist follower counts, with color encoding track duration. Only the top 500 most popular tracks are shown to reduce visual clutter.
 ### Design rationale
 A scatter-based representation supports multi-variable relationship analysis, while logarithmic scaling improves readability across large follower ranges. Color encoding enables an additional quantitative dimension without extra axes.
 ### Analytical purpose
-To explore whether popularity correlates with artist scale and to examine potential duration trends among highly popular tracks (There's a saying that recent popular songs tend to be shorter, years selection can be extended in hw3).
+To explore whether popularity correlates with artist scale (top 500) and to examine potential duration trends among highly popular tracks (There's a saying that recent popular songs tend to be shorter, years selection can be extended in hw3).
+Also, the duration legend takes 3-97% data to filter outliers.
 ## View 3 — Popularity Distribution by Album Type (Boxplot)
 This view summarizes popularity distributions across album types using boxplots with overlaid jittered points.
 ### Design rationale

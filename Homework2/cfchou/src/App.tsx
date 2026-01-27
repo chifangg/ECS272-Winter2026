@@ -20,11 +20,11 @@ type Row = {
 
 const DATA_URL = new URL("../data/spotify_dataclean.csv", import.meta.url).toString();
  const MORANDI_SEQ = [
-  "#c6cacef6", 
-  "#6c7c9c", 
-  "#8374ae", 
-  "#695b99", 
-  "#3b2c6f", 
+  "#adb6c0f6", 
+  "#6ca9d1", 
+  "#445ca4", 
+  "#b56d96", 
+  "#a2414b", 
 ];
 
 
@@ -321,7 +321,7 @@ export default function App() {
 
             <div className="workspaceBadge" aria-label="Workspace">
               <span className="workspaceDot" aria-hidden="true" />
-              <span className="workspaceLabel">chifang&apos;s workspace</span>
+              <span className="workspaceLabel">chifang&apos;s workspace :3</span>
             </div>
           </div>
         </div>
