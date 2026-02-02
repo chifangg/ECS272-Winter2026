@@ -1,0 +1,416 @@
+:root{
+  --bg: #f6f5f2;
+  --card: rgba(255,255,255,0.72);
+  --stroke: rgba(15, 23, 42, 0.10);
+  --text: rgba(15, 23, 42, 0.92);
+  --muted: rgba(15, 23, 42, 0.62);
+  --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  --radius: 16px;
+}
+
+html, body, #root { height: 100%; }
+body{
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+}
+
+.dashboard{
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+.header{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--stroke);
+}
+
+.header h1{
+  font-size: 18px;
+  margin: 0 0 6px 0;
+  letter-spacing: 0.2px;
+}
+.header p{
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.badges{
+  display:flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.badge{
+  font-size: 12px;
+  color: var(--muted);
+  border: 1px solid var(--stroke);
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.55);
+}
+
+.grid{
+  display:grid;
+  grid-template-rows: 1.05fr 0.95fr;
+  gap: 12px;
+  min-height: 0;
+}
+
+.rowTop{
+  display:grid;
+  grid-template-columns: 1fr;
+  min-height: 0;
+}
+
+.rowBottom{
+  display:grid;
+  grid-template-columns: 1.35fr 0.65fr;
+  gap: 12px;
+  min-height: 0;
+}
+
+.card{
+  background: var(--card);
+  border: 1px solid var(--stroke);
+  box-shadow: var(--shadow);
+  border-radius: var(--radius);
+  overflow: hidden;
+  min-height: 0;
+  display:flex;
+  flex-direction: column;
+}
+
+.cardHeader{
+  padding: 12px 14px 8px 14px;
+  border-bottom: 1px solid rgba(15,23,42,0.06);
+}
+.cardHeader .title{
+  margin:0;
+  font-size: 14px;
+}
+.cardHeader .subtitle{
+  margin: 6px 0 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.cardBody{
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+svg{ display:block; }
+
+
+
+.v1Header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.legendRow {
+  display: flex;
+  flex-wrap: nowrap;      
+  gap: 12px;
+  overflow-x: auto;        
+  white-space: nowrap;
+  padding-bottom: 4px;    
+  padding-top: 10px; 
+  max-width: 55%;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;          
+  font-size: 14px;
+  color: rgba(15, 23, 42, 0.75);
+}
+
+.legendItem .swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+}
+
+.legendItem .label {
+  max-width: 120px;         /* 可調 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.v2Header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+}
+
+.v2LegendWrap{
+  flex:0 0 auto;
+  margin-top:2px; 
+}
+
+.v2LegendSvg{
+  display:block;
+}
+
+
+
+.banner {
+  width: 100%;
+  padding: 18px 0 14px;
+  background: rgba(120, 160, 140, 0.18);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.bannerInner {
+  padding: 0 16px;
+  text-align: left;
+  max-width: none;
+  margin: 0;
+}
+
+
+.banner h1 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+  color: rgba(15, 23, 42, 0.92);
+}
+
+.banner p {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: rgba(15, 23, 42, 0.65);
+}
+
+
+.zoomCard {
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+  transform-origin: center;
+}
+
+.zoomCard:hover {
+  transform: scale(1.015);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+}
+
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modalPanel {
+  width: min(1100px, 92vw);
+  height: min(720px, 88vh);
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.35);
+  display: flex;
+  flex-direction: column;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.modalTitle {
+  flex: 1;
+  font-weight: 650;
+  color: rgba(15, 23, 42, 0.9);
+}
+
+.modalLegend {
+  margin-right: 6px;
+  opacity: 0.95;
+}
+
+.modalClose {
+  border: none;
+  background: rgba(15, 23, 42, 0.08);
+  color: rgba(15, 23, 42, 0.85);
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.modalClose:hover {
+  background: rgba(15, 23, 42, 0.12);
+}
+
+.modalBody {
+  flex: 1;
+  padding: 10px 12px 12px;
+}
+
+.loadingFloat {
+  position: fixed;
+  bottom: 14px;
+  right: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: rgba(15, 23, 42, 0.8);
+}
+
+
+
+.modalPanel {
+  width: min(1100px, 92vw);
+  height: min(820px, 86vh);
+  display: flex;
+  flex-direction: column;
+}
+
+
+.cardBody svg,
+
+.modalBody{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
+.modalBody svg{
+  width: 100%;
+  height: auto;      
+  max-height: 100%;     
+  display: block;
+}
+
+.modalOverlay {
+  background: rgba(0,0,0,0.55); 
+}
+.modalHeaderLeft{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  min-width:0;
+}
+
+.legendRowModal{
+  max-width:min(1200px, 92vw);
+  flex-wrap:wrap;
+  overflow:hidden;
+}
+
+
+.modalPanel{
+  position: relative; 
+}
+
+.modalClose{
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 5;
+
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid rgba(190, 191, 193, 0.12);
+  background: rgba(224, 221, 221, 0.92);
+  cursor: pointer;
+}
+
+.modalClose:hover{
+  background: rgb(93, 92, 92);
+}
+
+
+.modalHeader{
+  padding-right: 56px; 
+}
+
+
+.bannerInner{
+  padding: 14px 18px 1px;             
+}
+
+.bannerInner h1{
+  margin: 0;
+  line-height: 1.15;
+}
+
+.bannerMeta{
+  margin-top: 8px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 12px;
+}
+
+.bannerMeta p{
+  margin:0;
+  color: rgba(16, 17, 17, 0.62);
+  padding-top: 6px;
+}
+
+
+.workspaceBadge{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+
+  padding:4px 10px;               
+  border-radius:999px;
+
+  background: rgba(15,23,42,0.05); 
+  border: 1px solid rgba(15,23,42,0.08);
+  backdrop-filter: blur(6px);
+
+  color: rgba(18, 17, 17, 0.55);
+  font-size: 12px;
+  line-height: 1;
+  box-shadow: none;               
+}
+
+.workspaceDot{
+  width:6px;
+  height:6px;
+  border-radius:999px;
+  background: rgba(15,23,42,0.35);
+}
+
+.workspaceLabel{
+  white-space:nowrap;
+  letter-spacing: 0.2px;
+}
