@@ -136,7 +136,7 @@ export default function App() {
   }, []);
 
   const { byYearGenre, topGenres, yearExtent, genreColorMap } = useMemo(() => {
-    const yearExtent: [number, number] = [2009, 2025];
+    const yearExtent: [number, number] = [1998, 2025];
 
     if (!rows.length) {
       return {
@@ -248,7 +248,7 @@ export default function App() {
   }, [filteredRows, durMode, durThreshold, selectedAlbumType]);
 
   const byTypePopFiltered = useMemo(() => {
-    const yr: [number, number] = [2009, 2025];
+    const yr: [number, number] = [1998, 2025];
     const rowsInRange = filteredRows.filter((d) => d.year >= yr[0] && d.year <= yr[1]);
 
     const byTypePop = d3
@@ -393,9 +393,11 @@ export default function App() {
     v3LockedType,
   ]);
 
+
+  
   const modalTitle =
     activeView === "v1"
-      ? "Visualization 1: Top 10 genres throughout the years (2009–2025)"
+      ? "Visualization 1: Top 10 genres throughout the years (1998–2025)"
       : activeView === "v2"
       ? "Visualization 2: Popularity vs artist followers"
       : activeView === "v3"
@@ -436,7 +438,7 @@ export default function App() {
     <div className="dashboard">
       <div className="banner">
         <div className="bannerInner">
-          <h1>2009-2025 Spotify Global Music Dataset Dashboard</h1>
+          <h1>1998-2025 Spotify Global Music Dataset Dashboard</h1>
 
           <div className="bannerMeta">
             <div className="bannerHint">
@@ -472,7 +474,7 @@ export default function App() {
             <div className="cardHeader v1Header">
               <div className="v1Text">
                 <div className="titleRow">
-                  <p className="title">Visualization 1: Top 10 genres throughout the years (2009–2025)</p>
+                  <p className="title">Visualization 1: Top 10 genres throughout the years (1998–2025)</p>
                   <span className="miniChip" aria-label="Current year range">
                     {yearLabel}
                   </span>
@@ -767,14 +769,20 @@ function drawStackedAreaGenres(
   const innerH = Math.max(0, height - margin.top - margin.bottom);
   if (innerW <= 0 || innerH <= 0) return;
 
-  svg.attr("viewBox", `0 0 ${width} ${height}`)
+  svg
+    .attr("viewBox", `0 0 ${width} ${height}`)
     .attr("preserveAspectRatio", "xMidYMid meet")
     .style("width", "100%")
     .style("height", "100%");
 
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
-  const years = d3.range(yearExtent[0], yearExtent[1] + 1);
+  const effectiveExtent: [number, number] = selectedYearRange
+    ? ([Math.min(selectedYearRange[0], selectedYearRange[1]), Math.max(selectedYearRange[0], selectedYearRange[1])] as [number, number])
+    : yearExtent;
+
+  const years = d3.range(effectiveExtent[0], effectiveExtent[1] + 1);
+
 
   const yearRows = years.map((year) => {
     const obj: any = { year };
@@ -782,16 +790,19 @@ function drawStackedAreaGenres(
     return obj;
   });
 
+  
   for (const d of byYearGenre) {
-    if (d.year < yearExtent[0] || d.year > yearExtent[1]) continue;
-    const idx = d.year - yearExtent[0];
-    if (idx >= 0 && idx < yearRows.length && keys.includes(d.genre)) yearRows[idx][d.genre] = d.count;
+    if (d.year < effectiveExtent[0] || d.year > effectiveExtent[1]) continue;
+    const idx = d.year - effectiveExtent[0];
+    if (idx >= 0 && idx < yearRows.length && keys.includes(d.genre)) {
+      yearRows[idx][d.genre] = d.count;
+    }
   }
 
   const stack = d3.stack<any>().keys(keys);
   const series = stack(yearRows);
 
-  const x = d3.scaleLinear().domain(yearExtent).range([0, innerW]);
+  const x = d3.scaleLinear().domain(effectiveExtent).range([0, innerW]);
   const yMax = d3.max(series, (s) => d3.max(s, (p) => p[1])) ?? 1;
   const y = d3.scaleLinear().domain([0, yMax]).range([innerH, 0]).nice();
 
@@ -812,24 +823,11 @@ function drawStackedAreaGenres(
     .attr("fill", (d: any) => color(d.key))
     .attr("opacity", 0.9);
 
-  if (selectedYearRange) {
-    const [a, b] = selectedYearRange;
-    const x0 = x(a);
-    const x1 = x(b);
-    g.append("rect")
-      .attr("x", Math.min(x0, x1))
-      .attr("y", 0)
-      .attr("width", Math.abs(x1 - x0))
-      .attr("height", innerH)
-      .attr("fill", "rgba(15,23,42,0.08)")
-      .attr("stroke", "rgba(15,23,42,0.12)")
-      .attr("rx", 10)
-      .style("pointer-events", "none");
-  }
 
   const yearToCounts = new Map<number, Map<string, number>>();
   for (const yy of years) yearToCounts.set(yy, new Map(keys.map((k) => [k, 0])));
   for (const d of byYearGenre) {
+    if (d.year < effectiveExtent[0] || d.year > effectiveExtent[1]) continue;
     const m = yearToCounts.get(d.year);
     if (!m) continue;
     m.set(d.genre, d.count);
@@ -852,7 +850,7 @@ function drawStackedAreaGenres(
     const yearRaw = x.invert(mx);
     const year = Math.round(yearRaw);
 
-    if (year < yearExtent[0] || year > yearExtent[1]) {
+    if (year < effectiveExtent[0] || year > effectiveExtent[1]) {
       tip.style("display", "none");
       vline.style("display", "none");
       return;
@@ -865,7 +863,11 @@ function drawStackedAreaGenres(
     const total = d3.sum(entries, (d) => d.count);
     const topK = entries.slice(0, 5);
 
-    const lines: string[] = [`Year: ${year}`, `Total (weighted): ${total.toFixed(1)}`, ...topK.map((d) => `${d.genre}: ${d.count.toFixed(1)}`)];
+    const lines: string[] = [
+      `Year: ${year}`,
+      `Total (weighted): ${total.toFixed(1)}`,
+      ...topK.map((d) => `${d.genre}: ${d.count.toFixed(1)}`),
+    ];
 
     tipText.selectAll("tspan").remove();
     lines.forEach((s, i) => {
@@ -898,7 +900,10 @@ function drawStackedAreaGenres(
     .on("mousemove", showTipV1)
     .on("mouseleave", hideTipV1);
 
-  const tickVals = years;
+ 
+  const span = effectiveExtent[1] - effectiveExtent[0];
+  const step = span > 25 ? 2 : 1; 
+  const tickVals = years.filter((y) => (y - effectiveExtent[0]) % step === 0);
 
   g.append("g")
     .attr("transform", `translate(0,${innerH})`)
@@ -929,6 +934,7 @@ function drawStackedAreaGenres(
     .attr("font-size", 12)
     .text("Tracks (weighted count)");
 }
+
 
 function drawScatterTilesTopN(
   svgEl: SVGSVGElement,
