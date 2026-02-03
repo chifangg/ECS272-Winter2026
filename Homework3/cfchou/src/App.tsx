@@ -10,7 +10,6 @@ type Row = {
   artist_popularity: number;
   artist_followers: number;
 
-
   artist_genres?: string;
 
   album_type: string;
@@ -19,21 +18,14 @@ type Row = {
 };
 
 const DATA_URL = new URL("../data/spotify_dataclean.csv", import.meta.url).toString();
- const MORANDI_SEQ = [
-  "#adb6c0f6", 
-  "#6ca9d1", 
-  "#445ca4", 
-  "#b56d96", 
-  "#a2414b", 
-];
 
+const MORANDI_SEQ = ["#adb6c0f6", "#6ca9d1", "#445ca4", "#b56d96", "#a2414b"];
 
-  const morandiInterp = d3.scaleLinear<string>()
-  .domain(d3.range(0, MORANDI_SEQ.length).map(i => i / (MORANDI_SEQ.length - 1)))
+const morandiInterp = d3
+  .scaleLinear<string>()
+  .domain(d3.range(0, MORANDI_SEQ.length).map((i) => i / (MORANDI_SEQ.length - 1)))
   .range(MORANDI_SEQ)
   .interpolate(d3.interpolateRgb);
-
-
 
 function parseYear(dateStr: string | undefined) {
   if (!dateStr) return NaN;
@@ -58,18 +50,27 @@ function parseGenres(s: unknown): string[] {
 }
 
 type ActiveView = null | "v1" | "v2" | "v3";
+type DurFilterMode = "all" | "ge" | "le";
 
 export default function App() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
 
-
   const [v2LegendMin, setV2LegendMin] = useState(0);
   const [v2LegendMax, setV2LegendMax] = useState(1);
 
-
   const [activeView, setActiveView] = useState<ActiveView>(null);
 
+
+  const [yearRange, setYearRange] = useState<[number, number] | null>(null);
+
+  const [durMode, setDurMode] = useState<DurFilterMode>("all");
+  const [durThreshold, setDurThreshold] = useState<number>(3.0);
+
+ 
+  const [showV3Dots, setShowV3Dots] = useState(true); 
+  const [v3HoverType, setV3HoverType] = useState<string | null>(null); 
+  const [v3LockedType, setV3LockedType] = useState<string | null>(null); 
 
   const v1Ref = useRef<HTMLDivElement>(null);
   const v2Ref = useRef<HTMLDivElement>(null);
@@ -79,16 +80,16 @@ export default function App() {
   const v2Size = useResizeObserver(v2Ref);
   const v3Size = useResizeObserver(v3Ref);
 
-  
   const v1SvgRef = useRef<SVGSVGElement>(null);
   const v2SvgRef = useRef<SVGSVGElement>(null);
   const v3SvgRef = useRef<SVGSVGElement>(null);
 
-
   const modalBodyRef = useRef<HTMLDivElement>(null);
   const modalSize = useResizeObserver(modalBodyRef);
   const modalSvgRef = useRef<SVGSVGElement>(null);
-  
+
+ 
+  const selectedAlbumType = v3LockedType ?? v3HoverType;
 
   useEffect(() => {
     (async () => {
@@ -134,7 +135,7 @@ export default function App() {
     })();
   }, []);
 
-  const { byYearGenre, topGenres, yearExtent, byTypePop, genreColorMap } = useMemo(() => {
+  const { byYearGenre, topGenres, yearExtent, genreColorMap } = useMemo(() => {
     const yearExtent: [number, number] = [2009, 2025];
 
     if (!rows.length) {
@@ -142,13 +143,11 @@ export default function App() {
         byYearGenre: [] as Array<{ year: number; genre: string; count: number }>,
         topGenres: [] as string[],
         yearExtent,
-        byTypePop: [] as Array<{ album_type: string; pops: number[]; n: number }>,
         genreColorMap: new Map<string, string>(),
       };
     }
 
     const rowsInRange = rows.filter((d) => d.year >= yearExtent[0] && d.year <= yearExtent[1]);
-
 
     const genreCounts = new Map<string, number>();
     for (const r of rowsInRange) {
@@ -187,6 +186,70 @@ export default function App() {
       for (const g of topGenres) byYearGenre.push({ year: y, genre: g, count: counts.get(g) ?? 0 });
     }
 
+    return { byYearGenre, topGenres, yearExtent, genreColorMap };
+  }, [rows]);
+
+  const filteredRows = useMemo(() => {
+    if (!yearRange) return rows;
+    const [a, b] = yearRange;
+    return rows.filter((r) => r.year >= a && r.year <= b);
+  }, [rows, yearRange]);
+
+
+  const v2DurExtent = useMemo(() => {
+    const dataAll = filteredRows
+      .filter((d) => Number.isFinite(d.artist_followers) && d.artist_followers >= 1)
+      .filter((d) => Number.isFinite(d.track_popularity))
+      .filter((d) => Number.isFinite(d.track_duration_min))
+      .filter((d) => (d.track_name ?? "").toString().trim().length > 0)
+      .filter((d) => (d.artist_name ?? "").toString().trim().length > 0);
+
+    if (!dataAll.length) return { lo: 0, hi: 1 };
+
+    const TOP_N = 500;
+    const data = dataAll
+      .slice()
+      .sort((a, b) => b.track_popularity - a.track_popularity)
+      .slice(0, Math.min(TOP_N, dataAll.length));
+
+    const dursSorted = data.map((d) => d.track_duration_min).filter(Number.isFinite).sort(d3.ascending);
+    const lo = d3.quantile(dursSorted, 0.03) ?? d3.min(dursSorted) ?? 0;
+    const hi = d3.quantile(dursSorted, 0.97) ?? d3.max(dursSorted) ?? 1;
+    const a = Math.min(lo, hi);
+    const b = Math.max(lo, hi);
+    return { lo: a, hi: b };
+  }, [filteredRows]);
+
+
+  useEffect(() => {
+    if (!Number.isFinite(v2DurExtent.lo) || !Number.isFinite(v2DurExtent.hi)) return;
+    if (v2DurExtent.lo === v2DurExtent.hi) return;
+    setDurThreshold((cur) => Math.max(v2DurExtent.lo, Math.min(v2DurExtent.hi, cur)));
+  }, [v2DurExtent.lo, v2DurExtent.hi]);
+
+
+  const v2FilteredRows = useMemo(() => {
+    let base = filteredRows;
+
+
+    if (durMode !== "all") {
+      const th = durThreshold;
+      if (Number.isFinite(th)) {
+        base = durMode === "ge" ? base.filter((r) => r.track_duration_min >= th) : base.filter((r) => r.track_duration_min <= th);
+      }
+    }
+
+
+    if (selectedAlbumType) {
+      base = base.filter((r) => r.album_type === selectedAlbumType);
+    }
+
+    return base;
+  }, [filteredRows, durMode, durThreshold, selectedAlbumType]);
+
+  const byTypePopFiltered = useMemo(() => {
+    const yr: [number, number] = [2009, 2025];
+    const rowsInRange = filteredRows.filter((d) => d.year >= yr[0] && d.year <= yr[1]);
 
     const byTypePop = d3
       .rollups(
@@ -197,7 +260,6 @@ export default function App() {
             .filter((x) => Number.isFinite(x))
             .map((x) => Math.max(0, Math.min(100, x)))
             .sort(d3.ascending);
-
           return { pops, n: pops.length };
         },
         (d) => d.album_type
@@ -206,38 +268,71 @@ export default function App() {
 
     const order = ["album", "single", "compilation", "other"];
     byTypePop.sort((a, b) => order.indexOf(a.album_type) - order.indexOf(b.album_type));
+    return byTypePop;
+  }, [filteredRows]);
 
-    return { byYearGenre, topGenres, yearExtent, byTypePop, genreColorMap };
-  }, [rows]);
+  const yearOptions = useMemo(() => d3.range(yearExtent[0], yearExtent[1] + 1), [yearExtent]);
 
+  const setYearRangeSafe = (next: [number, number] | null) => {
+    if (!next) return setYearRange(null);
+    let [a, b] = next;
+    if (a > b) [a, b] = [b, a];
+    a = Math.max(yearExtent[0], Math.min(yearExtent[1], a));
+    b = Math.max(yearExtent[0], Math.min(yearExtent[1], b));
+    setYearRange([a, b]);
+  };
+
+  const yearLabel = yearRange ? `${yearRange[0]}–${yearRange[1]}` : "All years";
+
+  const resetAll = () => {
+    setYearRange(null);
+    setDurMode("all");
+    setDurThreshold(3.0);
+    setShowV3Dots(true);
+    setV3HoverType(null);
+    setV3LockedType(null);
+  };
 
   useEffect(() => {
     if (loading) return;
     if (!v1SvgRef.current) return;
     if (!v1Size.width || !v1Size.height) return;
 
-    drawStackedAreaGenres(v1SvgRef.current, v1Size, byYearGenre, topGenres, yearExtent, genreColorMap);
-  }, [loading, v1Size.width, v1Size.height, byYearGenre, topGenres, yearExtent, genreColorMap]);
+    drawStackedAreaGenres(v1SvgRef.current, v1Size, byYearGenre, topGenres, yearExtent, genreColorMap, yearRange);
+  }, [loading, v1Size.width, v1Size.height, byYearGenre, topGenres, yearExtent, genreColorMap, yearRange]);
 
   useEffect(() => {
     if (loading) return;
     if (!v2SvgRef.current) return;
     if (!v2Size.width || !v2Size.height) return;
 
-    const { legendMin, legendMax } = drawScatterTilesTopN(v2SvgRef.current, v2Size, rows);
+    const { legendMin, legendMax } = drawScatterTilesTopN(
+      v2SvgRef.current,
+      v2Size,
+      v2FilteredRows,
+      yearRange,
+      { mode: durMode, threshold: durThreshold },
+      selectedAlbumType
+    );
     setV2LegendMin(legendMin);
     setV2LegendMax(legendMax);
-  }, [loading, v2Size.width, v2Size.height, rows]);
+  }, [loading, v2Size.width, v2Size.height, v2FilteredRows, yearRange, durMode, durThreshold, selectedAlbumType]);
 
   useEffect(() => {
     if (loading) return;
     if (!v3SvgRef.current) return;
     if (!v3Size.width || !v3Size.height) return;
 
-    drawBoxplotPopularity(v3SvgRef.current, v3Size, byTypePop);
-  }, [loading, v3Size.width, v3Size.height, byTypePop]);
+    drawBoxplotPopularity(v3SvgRef.current, v3Size, byTypePopFiltered, yearRange, {
+      showDots: showV3Dots,
+      hoveredType: v3HoverType,
+      lockedType: v3LockedType,
+      onHoverType: setV3HoverType,
+      onLeave: () => setV3HoverType(null),
+      onClickType: (t) => setV3LockedType((cur) => (cur === t ? null : t)),
+    });
+  }, [loading, v3Size.width, v3Size.height, byTypePopFiltered, yearRange, showV3Dots, v3HoverType, v3LockedType]);
 
- 
   useEffect(() => {
     if (!activeView) return;
     if (loading) return;
@@ -249,7 +344,6 @@ export default function App() {
     let raf = 0;
 
     const draw = () => {
-
       const w1 = modalSize.width ?? 0;
       const h1 = modalSize.height ?? 0;
 
@@ -262,17 +356,22 @@ export default function App() {
       const size = { width: w, height: h };
 
       if (activeView === "v1") {
-        drawStackedAreaGenres(svgEl, size, byYearGenre, topGenres, yearExtent, genreColorMap);
+        drawStackedAreaGenres(svgEl, size, byYearGenre, topGenres, yearExtent, genreColorMap, yearRange);
       } else if (activeView === "v2") {
-        drawScatterTilesTopN(svgEl, size, rows);
+        drawScatterTilesTopN(svgEl, size, v2FilteredRows, yearRange, { mode: durMode, threshold: durThreshold }, selectedAlbumType);
       } else if (activeView === "v3") {
-        drawBoxplotPopularity(svgEl, size, byTypePop);
+        drawBoxplotPopularity(svgEl, size, byTypePopFiltered, yearRange, {
+          showDots: showV3Dots,
+          hoveredType: v3HoverType,
+          lockedType: v3LockedType,
+          onHoverType: () => {},
+          onLeave: () => {},
+          onClickType: () => {},
+        });
       }
     };
 
-
     raf = requestAnimationFrame(() => requestAnimationFrame(draw));
-
     return () => cancelAnimationFrame(raf);
   }, [
     activeView,
@@ -283,11 +382,17 @@ export default function App() {
     topGenres,
     yearExtent,
     genreColorMap,
-    rows,
-    byTypePop,
+    yearRange,
+    v2FilteredRows,
+    byTypePopFiltered,
+    durMode,
+    durThreshold,
+    selectedAlbumType,
+    showV3Dots,
+    v3HoverType,
+    v3LockedType,
   ]);
 
- 
   const modalTitle =
     activeView === "v1"
       ? "Visualization 1: Top 10 genres throughout the years (2009–2025)"
@@ -298,6 +403,7 @@ export default function App() {
       : "";
 
   const genreColor = (g: string) => genreColorMap.get(g) ?? "#999";
+
   const V1Legend = (
     <div className="legendRow legendRowModal" aria-label="Top genres legend (modal)">
       {topGenres.map((g) => (
@@ -309,44 +415,128 @@ export default function App() {
     </div>
   );
 
+  const durChipLabel =
+    durMode === "all" ? "All durations" : durMode === "ge" ? `≥ ${durThreshold.toFixed(1)} min` : `≤ ${durThreshold.toFixed(1)} min`;
+
+  const v2TypeChip = selectedAlbumType ? `Type: ${selectedAlbumType}` : null;
+
+
+  const bannerInteractions = [
+    "V1: hover tooltip",
+    "V1: year range filters V2/V3",
+    "V2: hover tooltip",
+    "V2: duration filter (mode + slider)",
+    "V3: hover filters V2",
+    "V3: click locks/unlocks type",
+    "V3: toggle sample dots",
+    "Click a card to zoom",
+  ].join(" · ");
+
   return (
     <div className="dashboard">
-      {}
       <div className="banner">
         <div className="bannerInner">
-          <h1>2019-2025 Spotify Global Music Dataset Dashboard</h1>
+          <h1>2009-2025 Spotify Global Music Dataset Dashboard</h1>
 
           <div className="bannerMeta">
-            <p>Hover/Click for details!</p>
+            <div className="bannerHint">
+              <div className="hintPrimary">Hover/Click for details • Click a card to zoom</div>
 
-            <div className="workspaceBadge" aria-label="Workspace">
-              <span className="workspaceDot" aria-hidden="true" />
-              <span className="workspaceLabel">chifang&apos;s workspace :3</span>
+              <div className="hintChips" aria-label="Interaction summary">
+                <span className="hintChip"><b>V1: </b> Year range → filters V2 & V3</span>
+                <span className="hintChip"><b>V2: </b> Duration filter (mode + slider)</span>
+                <span className="hintChip"><b>V3: </b> Album type hover → filter • Click to lock • Hide/Show dots</span>
+                <span className="hintChip hintChipEm"><b>Reset: </b>  click upper-right</span>
+              </div>
+            </div>
+
+
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <div className="workspaceBadge" aria-label="Workspace">
+                <span className="workspaceDot" aria-hidden="true" />
+                <span className="workspaceLabel">chifang&apos;s workspace :3</span>
+              </div>
+
+              <button className="miniBtn miniBtnPrimary resetBtn" onClick={resetAll} title="Reset all filters / locks">
+                  Reset
+                </button>
+
             </div>
           </div>
         </div>
       </div>
-
-
 
       <div className="grid">
         <div className="rowTop">
           <div className="card zoomCard" onClick={() => setActiveView("v1")} role="button" tabIndex={0}>
             <div className="cardHeader v1Header">
               <div className="v1Text">
-                <p className="title">Visualization 1: Top 10 genres throughout the years (2009–2025)</p>
-                <p className="subtitle">
-                  Stacked area = genre composition over time · Y uses weighted track counts (multi-genre tracks split).
-                </p>
+                <div className="titleRow">
+                  <p className="title">Visualization 1: Top 10 genres throughout the years (2009–2025)</p>
+                  <span className="miniChip" aria-label="Current year range">
+                    {yearLabel}
+                  </span>
+                </div>
+                <p className="subtitle">Year selector filters v2/v3 · Highlight shows selected range.</p>
               </div>
 
-              <div className="legendRow" aria-label="Top genres legend">
-                {topGenres.map((g) => (
-                  <div className="legendItem" key={g} title={g}>
-                    <span className="swatch" style={{ background: genreColor(g) }} />
-                    <span className="label">{g}</span>
+              <div className="v1HeaderRight">
+                <div className="yearChip" aria-label="Year range selector" onClick={(e) => e.stopPropagation()}>
+                  <span className="chipLabel">Year</span>
+
+                  <div className="chipControls">
+                    <label className="chipField">
+                      <span className="chipFieldLabel">From</span>
+                      <select
+                        className="chipSelect"
+                        value={yearRange ? yearRange[0] : yearExtent[0]}
+                        onChange={(e) => {
+                          const from = +e.target.value;
+                          const to = yearRange ? yearRange[1] : yearExtent[1];
+                          setYearRangeSafe([from, to]);
+                        }}
+                      >
+                        {yearOptions.map((y) => (
+                          <option key={`from-${y}`} value={y}>
+                            {y}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="chipField">
+                      <span className="chipFieldLabel">To</span>
+                      <select
+                        className="chipSelect"
+                        value={yearRange ? yearRange[1] : yearExtent[1]}
+                        onChange={(e) => {
+                          const to = +e.target.value;
+                          const from = yearRange ? yearRange[0] : yearExtent[0];
+                          setYearRangeSafe([from, to]);
+                        }}
+                      >
+                        {yearOptions.map((y) => (
+                          <option key={`to-${y}`} value={y}>
+                            {y}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <button className="chipBtn" onClick={() => setYearRange(null)} disabled={!yearRange} title="Clear year filter">
+                      Clear
+                    </button>
                   </div>
-                ))}
+                </div>
+
+                <div className="legendRow" aria-label="Top genres legend">
+                  {topGenres.map((g) => (
+                    <div className="legendItem" key={g} title={g}>
+                      <span className="swatch" style={{ background: genreColor(g) }} />
+                      <span className="label">{g}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -360,33 +550,82 @@ export default function App() {
           <div className="card zoomCard" onClick={() => setActiveView("v2")} role="button" tabIndex={0}>
             <div className="cardHeader v2Header">
               <div className="v2Text">
-                <p className="title">Visualization 2: Popularity vs artist followers</p>
-                <p className="subtitle">Top 500 tracks by popularity · Color = duration (minutes).</p>
+                <div className="titleRow" style={{ alignItems: "center", gap: 8 }}>
+                  <p className="title">Visualization 2: Popularity vs artist followers</p>
+
+
+                  <span className="miniChip" aria-label="Current year range">
+                    {yearLabel}
+                  </span>
+                  {selectedAlbumType && (
+                    <span className="miniChip" title="Filtered by v3 hover/lock">
+                      Type: {selectedAlbumType}
+                    </span>
+                  )}
+                </div>
+                <p className="subtitle">Top 500 tracks (in the filter) by popularity · Color = duration (minutes). Please select All/≥/≤ before adjusting duration filter bar.</p>
               </div>
 
-              <div className="v2LegendWrap" aria-label="Duration legend">
-                <svg className="v2LegendSvg" width={260} height={44} viewBox="0 0 260 44" role="img">
-                  <defs>
-                    <linearGradient id="dur-grad-header" x1="0%" x2="100%" y1="0%" y2="0%">
-                      {d3.range(0, 1.0001, 0.1).map((t) => (
-                        <stop key={t} offset={`${t * 100}%`} stopColor={morandiInterp(t)} />
-                      ))}
-                    </linearGradient>
-                  </defs>
+              <div className="v2HeaderRight" onClick={(e) => e.stopPropagation()}>
+                <div className="v2Controls">
+                  <div className="miniChip v2DurChip" role="group" aria-label="Duration filter">
+                    <span className="chipStrong">Duration</span>
 
-                  <text x="260" y="12" textAnchor="end" fontSize="11" fill="rgba(15,23,42,0.65)">
-                    Track duration (min)
-                  </text>
+                    <select
+                      value={durMode}
+                      onChange={(e) => setDurMode(e.target.value as DurFilterMode)}
+                      className="chipSelect"
+                      aria-label="Duration filter mode"
+                    >
+                      <option value="all">All</option>
+                      <option value="ge">≥</option>
+                      <option value="le">≤</option>
+                    </select>
 
-                  <rect x="0" y="18" width={260} height={12} rx={7} fill="url(#dur-grad-header)" opacity={0.9} />
+                    <input
+                      type="range"
+                      min={v2DurExtent.lo}
+                      max={v2DurExtent.hi}
+                      step={0.1}
+                      value={durThreshold}
+                      disabled={durMode === "all" || v2DurExtent.lo === v2DurExtent.hi}
+                      onChange={(e) => setDurThreshold(+e.target.value)}
+                      className="durSlider"
+                      aria-label="Duration threshold slider"
+                    />
 
-                  <text x="0" y="42" fontSize="11" fill="rgba(15,23,42,0.65)">
-                    {Number.isFinite(v2LegendMin) ? v2LegendMin.toFixed(1) : "—"}
-                  </text>
-                  <text x="260" y="42" textAnchor="end" fontSize="11" fill="rgba(15,23,42,0.65)">
-                    {Number.isFinite(v2LegendMax) ? v2LegendMax.toFixed(1) : "—"}
-                  </text>
-                </svg>
+                    <span className="durLabel">{durChipLabel}</span>
+
+                    <button className="chipBtn" onClick={() => setDurMode("all")} disabled={durMode === "all"} title="Clear duration filter">
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                <div className="v2LegendWrap" aria-label="Duration legend">
+                  <svg className="v2LegendSvg" width={260} height={44} viewBox="0 0 260 44" role="img">
+                    <defs>
+                      <linearGradient id="dur-grad-header" x1="0%" x2="100%" y1="0%" y2="0%">
+                        {d3.range(0, 1.0001, 0.1).map((t) => (
+                          <stop key={t} offset={`${t * 100}%`} stopColor={morandiInterp(t)} />
+                        ))}
+                      </linearGradient>
+                    </defs>
+
+                    <text x="260" y="12" textAnchor="end" fontSize="11" fill="rgba(15,23,42,0.65)">
+                      Track duration (min)
+                    </text>
+
+                    <rect x="0" y="18" width={260} height={12} rx={7} fill="url(#dur-grad-header)" opacity={0.9} />
+
+                    <text x="0" y="42" fontSize="11" fill="rgba(15,23,42,0.65)">
+                      {Number.isFinite(v2LegendMin) ? v2LegendMin.toFixed(1) : "—"}
+                    </text>
+                    <text x="260" y="42" textAnchor="end" fontSize="11" fill="rgba(15,23,42,0.65)">
+                      {Number.isFinite(v2LegendMax) ? v2LegendMax.toFixed(1) : "—"}
+                    </text>
+                  </svg>
+                </div>
               </div>
             </div>
 
@@ -397,9 +636,49 @@ export default function App() {
 
           <div className="card zoomCard" onClick={() => setActiveView("v3")} role="button" tabIndex={0}>
             <div className="cardHeader">
-              <p className="title">Visualization 3: Popularity distribution by album type</p>
+
+              <div className="v3HeaderRow" style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                <div className="titleRow" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <p className="title" style={{ margin: 0 }}>
+                    Visualization 3: Popularity distribution by album type
+                  </p>
+
+                  <span className="miniChip" aria-label="Current year range">
+                    {yearLabel}
+                  </span>
+
+    
+                  {v3LockedType && (
+                    <span className="miniChip" title="Click same type to unlock">
+                      Locked: {v3LockedType}
+                    </span>
+                  )}
+
+
+                  {!v3LockedType && v3HoverType && (
+                    <span className="miniChip" title="Hovering">
+                      Hover: {v3HoverType}
+                    </span>
+                  )}
+                </div>
+
+
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }} onClick={(e) => e.stopPropagation()}>
+                  <button
+                      className={`dotsBtn ${showV3Dots ? "isOn" : "isOff"}`}
+                      onClick={() => setShowV3Dots((cur) => !cur)}
+                      aria-label="Toggle sample points"
+                      title="Toggle sample points"
+                    >
+                      {showV3Dots ? "Hide dots" : "Show dots"}
+                    </button>
+
+                </div>
+              </div>
+
               <p className="subtitle">Box = median + IQR · Whiskers = 1.5×IQR · Dots = deterministic sample</p>
             </div>
+
             <div className="cardBody" ref={v3Ref}>
               <svg ref={v3SvgRef} />
             </div>
@@ -407,22 +686,25 @@ export default function App() {
         </div>
       </div>
 
-      {}
       {activeView && (
         <div className="modalOverlay" onMouseDown={() => setActiveView(null)}>
           <div className="modalPanel" onMouseDown={(e) => e.stopPropagation()}>
-            {}
             <div className="modalHeader">
               <div className="modalHeaderLeft">
                 <div className="modalTitle">{modalTitle}</div>
+                <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <span className="miniChip">{yearLabel}</span>
+                  {activeView === "v2" && <span className="miniChip">{durChipLabel}</span>}
+                  {activeView === "v2" && v2TypeChip && <span className="miniChip">{v2TypeChip}</span>}
+                  {activeView === "v3" && <span className="miniChip">{showV3Dots ? "Dots: On" : "Dots: Off"}</span>}
+                  {activeView === "v3" && v3LockedType && <span className="miniChip">{`Locked: ${v3LockedType}`}</span>}
+                </div>
                 {activeView === "v1" && V1Legend}
               </div>
 
-              {}
               {activeView === "v2" && (
                 <div className="modalLegend">
                   <svg width={260} height={44} viewBox="0 0 260 44" role="img">
-
                     <defs>
                       <linearGradient id="dur-grad-modal" x1="0%" x2="100%" y1="0%" y2="0%">
                         {d3.range(0, 1.0001, 0.1).map((t) => (
@@ -464,15 +746,14 @@ export default function App() {
   );
 }
 
-
-
 function drawStackedAreaGenres(
   svgEl: SVGSVGElement,
   size: { width: number; height: number },
   byYearGenre: Array<{ year: number; genre: string; count: number }>,
   keys: string[],
   yearExtent: [number, number],
-  colorMap: Map<string, string>
+  colorMap: Map<string, string>,
+  selectedYearRange: [number, number] | null
 ) {
   const svg = d3.select(svgEl);
   svg.selectAll("*").remove();
@@ -486,7 +767,10 @@ function drawStackedAreaGenres(
   const innerH = Math.max(0, height - margin.top - margin.bottom);
   if (innerW <= 0 || innerH <= 0) return;
 
-  svg.attr("viewBox", `0 0 ${width} ${height}`).attr("preserveAspectRatio", "xMidYMid meet").style("width", "100%").style("height", "100%");
+  svg.attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("preserveAspectRatio", "xMidYMid meet")
+    .style("width", "100%")
+    .style("height", "100%");
 
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
@@ -528,6 +812,20 @@ function drawStackedAreaGenres(
     .attr("fill", (d: any) => color(d.key))
     .attr("opacity", 0.9);
 
+  if (selectedYearRange) {
+    const [a, b] = selectedYearRange;
+    const x0 = x(a);
+    const x1 = x(b);
+    g.append("rect")
+      .attr("x", Math.min(x0, x1))
+      .attr("y", 0)
+      .attr("width", Math.abs(x1 - x0))
+      .attr("height", innerH)
+      .attr("fill", "rgba(15,23,42,0.08)")
+      .attr("stroke", "rgba(15,23,42,0.12)")
+      .attr("rx", 10)
+      .style("pointer-events", "none");
+  }
 
   const yearToCounts = new Map<number, Map<string, number>>();
   for (const yy of years) yearToCounts.set(yy, new Map(keys.map((k) => [k, 0])));
@@ -563,10 +861,7 @@ function drawStackedAreaGenres(
     const counts = yearToCounts.get(year);
     if (!counts) return;
 
-    const entries = keys
-      .map((k) => ({ genre: k, count: counts.get(k) ?? 0 }))
-      .sort((a, b) => b.count - a.count);
-
+    const entries = keys.map((k) => ({ genre: k, count: counts.get(k) ?? 0 })).sort((a, b) => b.count - a.count);
     const total = d3.sum(entries, (d) => d.count);
     const topK = entries.slice(0, 5);
 
@@ -586,7 +881,6 @@ function drawStackedAreaGenres(
     const ty = Math.max(pad, sy - (bb.height + 14) - pad);
 
     tip.attr("transform", `translate(${tx},${ty})`).style("display", null);
-
     vline.attr("x1", x(year)).attr("x2", x(year)).style("display", null);
   }
 
@@ -604,12 +898,14 @@ function drawStackedAreaGenres(
     .on("mousemove", showTipV1)
     .on("mouseleave", hideTipV1);
 
+  const tickVals = years;
 
   g.append("g")
     .attr("transform", `translate(0,${innerH})`)
-    .call(d3.axisBottom(x).ticks(9).tickFormat(d3.format("d") as any))
+    .call(d3.axisBottom(x).tickValues(tickVals).tickFormat(d3.format("d") as any))
     .call((gg) => gg.selectAll(".domain").attr("opacity", 0.2))
-    .call((gg) => gg.selectAll("line").attr("opacity", 0.15));
+    .call((gg) => gg.selectAll("line").attr("opacity", 0.15))
+    .call((gg) => gg.selectAll("text").attr("font-size", 10));
 
   g.append("g")
     .call(d3.axisLeft(y).ticks(5))
@@ -634,17 +930,15 @@ function drawStackedAreaGenres(
     .text("Tracks (weighted count)");
 }
 
-
-
-
 function drawScatterTilesTopN(
   svgEl: SVGSVGElement,
   size: { width: number; height: number },
-  rows: Row[]
+  rows: Row[],
+  yearRange: [number, number] | null,
+  durFilter: { mode: DurFilterMode; threshold: number },
+  selectedAlbumType: string | null
 ): { legendMin: number; legendMax: number } {
   const fallback = { legendMin: 0, legendMax: 1 };
-  const svg = d3.select(svgEl);
-  svg.selectAll("*").remove();
 
   const width = size.width;
   const height = size.height;
@@ -654,9 +948,35 @@ function drawScatterTilesTopN(
   const innerH = Math.max(0, height - margin.top - margin.bottom);
   if (innerW <= 0 || innerH <= 0) return fallback;
 
-  svg.attr("viewBox", `0 0 ${width} ${height}`).attr("preserveAspectRatio", "xMidYMid meet").style("width", "100%").style("height", "100%");
+  const svg = d3.select(svgEl);
+  svg.attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("preserveAspectRatio", "xMidYMid meet")
+    .style("width", "100%")
+    .style("height", "100%");
 
-  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+  const t = svg.transition().duration(550).ease(d3.easeCubicOut);
+
+  let root = svg.select<SVGGElement>("g.root");
+  if (root.empty()) root = svg.append("g").attr("class", "root");
+  root.attr("transform", `translate(${margin.left},${margin.top})`);
+
+  let gx = root.select<SVGGElement>("g.axis-x");
+  if (gx.empty()) gx = root.append("g").attr("class", "axis-x");
+  gx.attr("transform", `translate(0,${innerH})`);
+
+  let gy = root.select<SVGGElement>("g.axis-y");
+  if (gy.empty()) gy = root.append("g").attr("class", "axis-y");
+
+  let dotsG = root.select<SVGGElement>("g.dots");
+  if (dotsG.empty()) dotsG = root.append("g").attr("class", "dots");
+
+  let tip = svg.select<SVGGElement>("g.tip");
+  if (tip.empty()) {
+    tip = svg.append("g").attr("class", "tip").style("pointer-events", "none").style("display", "none");
+    tip.append("rect").attr("rx", 10).attr("fill", "rgba(255,255,255,0.96)").attr("stroke", "rgba(15,23,42,0.18)");
+    tip.append("text").attr("class", "tipText").attr("font-size", 12).attr("fill", "rgba(15,23,42,0.85)");
+  }
+  const tipText = tip.select<SVGTextElement>("text.tipText");
 
   const dataAll = rows
     .filter((d) => Number.isFinite(d.artist_followers) && d.artist_followers >= 1)
@@ -665,7 +985,13 @@ function drawScatterTilesTopN(
     .filter((d) => (d.track_name ?? "").toString().trim().length > 0)
     .filter((d) => (d.artist_name ?? "").toString().trim().length > 0);
 
-  if (!dataAll.length) return fallback;
+  if (!dataAll.length) {
+    dotsG.selectAll("circle.dot")
+      .data([])
+      .join((enter) => enter, (update) => update, (exit) => exit.transition(t).attr("opacity", 0).remove());
+    tip.style("display", "none");
+    return fallback;
+  }
 
   const TOP_N = 500;
   const data = dataAll
@@ -687,8 +1013,8 @@ function drawScatterTilesTopN(
 
   const y = d3.scaleLinear().domain([yMin, yMax]).range([innerH, 0]).nice();
 
-  const dursSorted = data.map((d) => d.track_duration_min).filter(Number.isFinite).sort(d3.ascending);
 
+  const dursSorted = data.map((d) => d.track_duration_min).filter(Number.isFinite).sort(d3.ascending);
   const durLo = d3.quantile(dursSorted, 0.03) ?? d3.min(dursSorted) ?? 0;
   const durHi = d3.quantile(dursSorted, 0.97) ?? d3.max(dursSorted) ?? 1;
 
@@ -702,38 +1028,55 @@ function drawScatterTilesTopN(
   };
 
   const morandiScale = d3
-  .scaleLinear<string>()
-  .domain(d3.range(0, MORANDI_SEQ.length).map(i => i / (MORANDI_SEQ.length - 1)))
-  .range(MORANDI_SEQ)
-  .interpolate(d3.interpolateRgb);
+    .scaleLinear<string>()
+    .domain(d3.range(0, MORANDI_SEQ.length).map((i) => i / (MORANDI_SEQ.length - 1)))
+    .range(MORANDI_SEQ)
+    .interpolate(d3.interpolateRgb);
 
-const color = (v: number) => {
-  const t = durT(v);       
-  return morandiScale(t);
-};
-
+  const color = (v: number) => morandiScale(durT(v));
 
   const xTicks = [1e5, 3e5, 1e6, 3e6, 1e7, 3e7, 1e8, 3e8];
 
-  g.append("g")
-    .attr("transform", `translate(0,${innerH})`)
-    .call(d3.axisBottom(x).tickValues(xTicks).tickFormat(d3.format("~s") as any))
-    .call((gg) => gg.selectAll(".domain").attr("opacity", 0.2))
-    .call((gg) => gg.selectAll("line").attr("opacity", 0.15));
+  gx.transition(t)
+    .call(d3.axisBottom(x).tickValues(xTicks).tickFormat(d3.format("~s") as any) as any)
+    .call((gg: any) => gg.selectAll(".domain").attr("opacity", 0.2))
+    .call((gg: any) => gg.selectAll("line").attr("opacity", 0.15));
 
-  g.append("g")
-    .call(d3.axisLeft(y).ticks(5))
-    .call((gg) => gg.selectAll(".domain").attr("opacity", 0.2))
-    .call((gg) => gg.selectAll("line").attr("opacity", 0.15));
+  gy.transition(t)
+    .call(d3.axisLeft(y).ticks(5) as any)
+    .call((gg: any) => gg.selectAll(".domain").attr("opacity", 0.2))
+    .call((gg: any) => gg.selectAll("line").attr("opacity", 0.15));
 
-  const tip = svg.append("g").style("pointer-events", "none").style("display", "none");
+ 
+  let xlab = root.select<SVGTextElement>("text.xlab");
+  if (xlab.empty()) xlab = root.append("text").attr("class", "xlab");
+  xlab
+    .attr("x", innerW / 2)
+    .attr("y", innerH + 40)
+    .attr("text-anchor", "middle")
+    .attr("fill", "rgba(15,23,42,0.7)")
+    .attr("font-size", 12)
+    .text("Artist followers (log scale)");
 
-  tip.append("rect").attr("rx", 10).attr("fill", "rgba(255,255,255,0.96)").attr("stroke", "rgba(15,23,42,0.18)");
-  const tipText = tip.append("text").attr("font-size", 12).attr("fill", "rgba(15,23,42,0.85)");
+  let ylab = root.select<SVGTextElement>("text.ylab");
+  if (ylab.empty()) ylab = root.append("text").attr("class", "ylab");
+  ylab
+    .attr("x", -innerH / 2)
+    .attr("y", -62)
+    .attr("transform", "rotate(-90)")
+    .attr("text-anchor", "middle")
+    .attr("fill", "rgba(15,23,42,0.7)")
+    .attr("font-size", 12)
+    .text("Track popularity (0–100)");
+
+
+  
 
   function showTip(evt: any, d: Row) {
     const lines = [
       `${d.artist_name} — ${d.track_name}`,
+      `Year: ${d.year}`,
+      `Album type: ${d.album_type}`,
       `Popularity: ${d.track_popularity.toFixed(0)}`,
       `Followers: ${d3.format(".2s")(d.artist_followers)}`,
       `Duration: ${d.track_duration_min.toFixed(2)} min`,
@@ -759,55 +1102,60 @@ const color = (v: number) => {
     tip.style("display", "none");
   }
 
-  const tile = 10;
-  const half = tile / 2;
-
   const r = 4.2;
+  const keyFn = (d: Row) => d.track_id ?? `${d.artist_name ?? ""}|${d.track_name ?? ""}|${d.year}|${d.artist_followers}`;
 
-  g.append("g")
-    .selectAll("circle.dot")
-    .data(data)
-    .join("circle")
-    .attr("class", "dot")
-    .attr("cx", (d) => x(Math.max(1, d.artist_followers)))
-    .attr("cy", (d) => y(d.track_popularity))
-    .attr("r", r)
-    .attr("fill", (d) => color(d.track_duration_min))
-    .attr("opacity", 0.82)
-    .attr("stroke", "rgba(255,255,255,0.85)")
-    .attr("stroke-width", 1.1)
-    .on("mousemove", (evt, d) => showTip(evt, d))
-    .on("mouseleave", hideTip);
+  const sel = dotsG.selectAll<SVGCircleElement, Row>("circle.dot").data(data, keyFn as any);
 
-
-  g.append("text")
-    .attr("x", innerW / 2)
-    .attr("y", innerH + 40)
-    .attr("text-anchor", "middle")
-    .attr("fill", "rgba(15,23,42,0.7)")
-    .attr("font-size", 12)
-    .text("Artist followers (log scale)");
-
-  g.append("text")
-    .attr("x", -innerH / 2)
-    .attr("y", -62)
-    .attr("transform", "rotate(-90)")
-    .attr("text-anchor", "middle")
-    .attr("fill", "rgba(15,23,42,0.7)")
-    .attr("font-size", 12)
-    .text("Track popularity (0–100)");
+  sel.join(
+    (enter) =>
+      enter
+        .append("circle")
+        .attr("class", "dot")
+        .attr("r", r)
+        .attr("cx", (d) => x(Math.max(1, d.artist_followers)))
+        .attr("cy", (d) => y(d.track_popularity))
+        .attr("fill", (d) => color(d.track_duration_min))
+        .attr("opacity", 0)
+        .attr("stroke", "rgba(255,255,255,0.85)")
+        .attr("stroke-width", 1.1)
+        .on("mouseenter", (evt, d) => showTip(evt, d))
+        .on("mousemove", (evt, d) => showTip(evt, d))
+        .on("mouseleave", hideTip)
+        .call((e) => e.transition(t).attr("opacity", 0.82)),
+    (update) =>
+      update.call((u) =>
+        u
+          .on("mouseenter", (evt, d) => showTip(evt, d))
+          .on("mousemove", (evt, d) => showTip(evt, d))
+          .on("mouseleave", hideTip)
+          .transition(t)
+          .attr("cx", (d) => x(Math.max(1, d.artist_followers)))
+          .attr("cy", (d) => y(d.track_popularity))
+          .attr("fill", (d) => color(d.track_duration_min))
+          .attr("opacity", 0.82)
+      ),
+    (exit) => exit.call((ex) => ex.transition(t).attr("opacity", 0).remove())
+  );
 
   return { legendMin, legendMax };
 }
 
+
 function drawBoxplotPopularity(
   svgEl: SVGSVGElement,
   size: { width: number; height: number },
-  stats: Array<{ album_type: string; pops: number[]; n: number }>
+  stats: Array<{ album_type: string; pops: number[]; n: number }>,
+  yearRange: [number, number] | null,
+  opts: {
+    showDots: boolean;
+    hoveredType: string | null;
+    lockedType: string | null;
+    onHoverType: (t: string) => void;
+    onLeave: () => void;
+    onClickType: (t: string) => void;
+  }
 ) {
-  const svg = d3.select(svgEl);
-  svg.selectAll("*").remove();
-
   const width = size.width;
   const height = size.height;
 
@@ -816,16 +1164,47 @@ function drawBoxplotPopularity(
   const innerH = Math.max(0, height - margin.top - margin.bottom);
   if (innerW <= 0 || innerH <= 0) return;
 
-  svg.attr("viewBox", `0 0 ${width} ${height}`).attr("preserveAspectRatio", "xMidYMid meet").style("width", "100%").style("height", "100%");
+  const svg = d3.select(svgEl);
+  svg.attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("preserveAspectRatio", "xMidYMid meet")
+    .style("width", "100%")
+    .style("height", "100%");
 
-  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+  const t = svg.transition().duration(600).ease(d3.easeCubicOut);
 
+  let root = svg.select<SVGGElement>("g.root");
+  if (root.empty()) root = svg.append("g").attr("class", "root");
+  root.attr("transform", `translate(${margin.left},${margin.top})`);
+
+  let gx = root.select<SVGGElement>("g.axis-x");
+  if (gx.empty()) gx = root.append("g").attr("class", "axis-x");
+  gx.attr("transform", `translate(0,${innerH})`);
+
+  let gy = root.select<SVGGElement>("g.axis-y");
+  if (gy.empty()) gy = root.append("g").attr("class", "axis-y");
+
+  let jitterG = root.select<SVGGElement>("g.jitter");
+  if (jitterG.empty()) jitterG = root.append("g").attr("class", "jitter");
+  jitterG
+    .attr("pointer-events", opts.showDots ? "all" : "none")
+    .transition(t)
+    .attr("opacity", opts.showDots ? 0.35 : 0);
+
+  let boxesG = root.select<SVGGElement>("g.boxes");
+  if (boxesG.empty()) boxesG = root.append("g").attr("class", "boxes");
+
+
+  let tip = svg.select<SVGGElement>("g.tip");
+  if (tip.empty()) {
+    tip = svg.append("g").attr("class", "tip").style("pointer-events", "none").style("display", "none");
+    tip.append("rect").attr("rx", 10).attr("fill", "rgba(255,255,255,0.96)").attr("stroke", "rgba(15,23,42,0.18)");
+    tip.append("text").attr("class", "tipText").attr("font-size", 12).attr("fill", "rgba(15,23,42,0.85)");
+  }
+  const tipText = tip.select<SVGTextElement>("text.tipText");
 
   const order = ["album", "single", "compilation"];
   const byType = new Map(stats.map((d) => [d.album_type, d]));
-  const data = order
-    .map((k) => byType.get(k) ?? { album_type: k, pops: [] as number[], n: 0 })
-    .filter((d) => d.n > 0);
+  const data = order.map((k) => byType.get(k) ?? { album_type: k, pops: [] as number[], n: 0 }).filter((d) => d.n > 0);
 
   const cats = data.map((d) => d.album_type);
   const x = d3.scaleBand<string>().domain(cats).range([0, innerW]).padding(0.35);
@@ -841,17 +1220,16 @@ function drawBoxplotPopularity(
     .range([innerH, 0])
     .nice();
 
-  g.append("g")
-    .attr("transform", `translate(0,${innerH})`)
-    .call(d3.axisBottom(x))
-    .call((gg) => gg.selectAll(".domain").attr("opacity", 0.2));
+  gx.transition(t).call(d3.axisBottom(x) as any).call((gg: any) => gg.selectAll(".domain").attr("opacity", 0.2));
 
-  g.append("g")
-    .call(d3.axisLeft(y).ticks(5))
-    .call((gg) => gg.selectAll(".domain").attr("opacity", 0.2))
-    .call((gg) => gg.selectAll("line").attr("opacity", 0.15));
+  gy.transition(t)
+    .call(d3.axisLeft(y).ticks(5) as any)
+    .call((gg: any) => gg.selectAll(".domain").attr("opacity", 0.2))
+    .call((gg: any) => gg.selectAll("line").attr("opacity", 0.15));
 
-  g.append("text")
+  let ylab = root.select<SVGTextElement>("text.ylab");
+  if (ylab.empty()) ylab = root.append("text").attr("class", "ylab");
+  ylab
     .attr("x", -innerH / 2)
     .attr("y", -62)
     .attr("transform", "rotate(-90)")
@@ -860,12 +1238,15 @@ function drawBoxplotPopularity(
     .attr("font-size", 12)
     .text("Track popularity (0–100)");
 
+
   const col = d3.scaleOrdinal<string, string>().domain(order).range(["#7E8A98", "#A7B48E", "#B79A8B"]);
 
 
-  const tip = svg.append("g").style("pointer-events", "none").style("display", "none");
-  tip.append("rect").attr("rx", 10).attr("fill", "rgba(255,255,255,0.96)").attr("stroke", "rgba(15,23,42,0.18)");
-  const tipText = tip.append("text").attr("font-size", 12).attr("fill", "rgba(15,23,42,0.85)");
+  const dotFill = (type: string) => {
+    const base = d3.color(col(type));
+    if (!base) return col(type);
+    return base.darker(0.7).formatHex();
+  };
 
   function showTip(evt: any, d: any) {
     const lines = [
@@ -874,6 +1255,7 @@ function drawBoxplotPopularity(
       `Q1–Q3: ${d.q1.toFixed(1)} – ${d.q3.toFixed(1)} (IQR ${(d.q3 - d.q1).toFixed(1)})`,
       `Whiskers: ${d.lo.toFixed(1)} – ${d.hi.toFixed(1)}`,
       `n = ${d.n.toLocaleString()}`,
+      `Tip: hover to filter v2; click to lock`,
     ];
 
     tipText.selectAll("tspan").remove();
@@ -896,7 +1278,6 @@ function drawBoxplotPopularity(
     tip.style("display", "none");
   }
 
-
   function hash01(str: string) {
     let h = 2166136261;
     for (let i = 0; i < str.length; i++) {
@@ -918,7 +1299,6 @@ function drawBoxplotPopularity(
     const lo = d3.min(v.filter((x) => x >= loFence)) ?? v[0];
     const hi = d3.max(v.filter((x) => x <= hiFence)) ?? v[v.length - 1];
 
-
     const maxPts = 180;
     const step = Math.max(1, Math.floor(v.length / maxPts));
     const sample = v.filter((_, i) => i % step === 0);
@@ -926,89 +1306,145 @@ function drawBoxplotPopularity(
     return { album_type: d.album_type, n: v.length, q1, med, q3, lo, hi, sample };
   });
 
+  const jitterData = summary.flatMap((d) =>
+    d.sample.map((v, i) => ({
+      album_type: d.album_type,
+      v,
+      i,
+    }))
+  );
 
-  const jitterG = g.append("g").attr("opacity", 0.22);
+  const jitterSel = jitterG.selectAll<SVGCircleElement, any>("circle.pt").data(jitterData, (d: any) => `${d.album_type}:${d.i}`);
 
-  summary.forEach((d) => {
-    const cx = (x(d.album_type) ?? 0) + x.bandwidth() / 2;
-    const j = x.bandwidth() * 0.28 || 10;
-
-    jitterG
-      .selectAll(`circle.pt-${d.album_type}`)
-      .data(d.sample.map((v, i) => ({ v, i })))
-      .join("circle")
-      .attr("cx", (p) => {
-        const t = hash01(`${d.album_type}:${p.i}`);
-        const dx = (t * 2 - 1) * j;
-        return cx + dx;
-      })
-      .attr("cy", (p) => y(p.v))
-      .attr("r", 2.2)
-      .attr("fill", col(d.album_type));
-  });
-
+  jitterSel.join(
+    (enter) =>
+      enter
+        .append("circle")
+        .attr("class", "pt")
+        .attr("r", 2.2)
+        .attr("opacity", 0)
+        .attr("fill", (d) => dotFill(d.album_type))
+        .attr("cx", (d) => {
+          const cx = (x(d.album_type) ?? 0) + x.bandwidth() / 2;
+          const j = x.bandwidth() * 0.28 || 10;
+          const tt = hash01(`${d.album_type}:${d.i}`);
+          const dx = (tt * 2 - 1) * j;
+          return cx + dx;
+        })
+        .attr("cy", (d) => y(d.v))
+        .call((e) => e.transition(t).attr("opacity", 1)),
+    (update) =>
+      update.call((u) =>
+        u
+          .transition(t)
+          .attr("fill", (d) => dotFill(d.album_type))
+          .attr("cx", (d) => {
+            const cx = (x(d.album_type) ?? 0) + x.bandwidth() / 2;
+            const j = x.bandwidth() * 0.28 || 10;
+            const tt = hash01(`${d.album_type}:${d.i}`);
+            const dx = (tt * 2 - 1) * j;
+            return cx + dx;
+          })
+          .attr("cy", (d) => y(d.v))
+      ),
+    (exit) => exit.call((ex) => ex.transition(t).attr("opacity", 0).remove())
+  );
 
   const boxW = Math.max(18, (x.bandwidth() ?? 40) * 0.72);
   const half = boxW / 2;
 
-  const boxG = g.append("g");
-  const item = boxG.selectAll("g.box").data(summary).join("g").attr("class", "box");
+  const boxSel = boxesG.selectAll<SVGGElement, any>("g.box").data(summary, (d: any) => d.album_type);
 
-  item.each(function (d) {
-    const gg = d3.select(this);
-    const cx = (x(d.album_type) ?? 0) + x.bandwidth() / 2;
+  const boxEnter = boxSel.enter().append("g").attr("class", "box").attr("opacity", 0);
 
-    gg.append("line")
-      .attr("x1", cx)
-      .attr("x2", cx)
-      .attr("y1", y(d.lo))
-      .attr("y2", y(d.hi))
-      .attr("stroke", "rgba(15,23,42,0.28)")
-      .attr("stroke-width", 2);
+  boxEnter.append("line").attr("class", "whisker");
+  boxEnter.append("line").attr("class", "cap lo");
+  boxEnter.append("line").attr("class", "cap hi");
 
-    gg.append("line")
-      .attr("x1", cx - half * 0.55)
-      .attr("x2", cx + half * 0.55)
-      .attr("y1", y(d.lo))
-      .attr("y2", y(d.lo))
-      .attr("stroke", "rgba(15,23,42,0.28)")
-      .attr("stroke-width", 2);
+  boxEnter.append("rect").attr("class", "rect").attr("rx", 12).attr("opacity", 0.82);
+  boxEnter.append("line").attr("class", "median").attr("stroke", "rgba(15,23,42,0.75)").attr("stroke-width", 2.2);
+  boxEnter.append("text").attr("class", "nlabel").attr("text-anchor", "middle").attr("font-size", 11).attr("fill", "rgba(15,23,42,0.55)");
 
-    gg.append("line")
-      .attr("x1", cx - half * 0.55)
-      .attr("x2", cx + half * 0.55)
-      .attr("y1", y(d.hi))
-      .attr("y2", y(d.hi))
-      .attr("stroke", "rgba(15,23,42,0.28)")
-      .attr("stroke-width", 2);
+  const boxAll = boxEnter.merge(boxSel as any);
 
-    gg.append("rect")
-      .attr("x", cx - half)
-      .attr("y", y(d.q3))
-      .attr("width", boxW)
-      .attr("height", Math.max(1, y(d.q1) - y(d.q3)))
-      .attr("rx", 12)
-      .attr("fill", col(d.album_type))
-      .attr("opacity", 0.82)
-      .on("mousemove", (evt) => showTip(evt, d as any))
-      .on("mouseleave", hideTip);
+  const focusType = opts.lockedType ?? opts.hoveredType;
+  const isFocused = (t0: string) => (focusType ? t0 === focusType : true);
 
-    gg.append("line")
-      .attr("x1", cx - half)
-      .attr("x2", cx + half)
-      .attr("y1", y(d.med))
-      .attr("y2", y(d.med))
-      .attr("stroke", "rgba(15,23,42,0.75)")
-      .attr("stroke-width", 2.2)
-      .on("mousemove", (evt) => showTip(evt, d as any))
-      .on("mouseleave", hideTip);
+  boxAll
+    .transition(t)
+    .attr("opacity", (d: any) => (isFocused(d.album_type) ? 1 : 0.28))
+    .attr("transform", (d: any) => `translate(${(x(d.album_type) ?? 0) + x.bandwidth() / 2},0)`);
 
-    gg.append("text")
-      .attr("x", cx)
-      .attr("y", y(d.q3) - 10)
-      .attr("text-anchor", "middle")
-      .attr("font-size", 11)
-      .attr("fill", "rgba(15,23,42,0.55)")
-      .text(`n=${d.n.toLocaleString()}`);
-  });
+  boxAll
+    .select<SVGLineElement>("line.whisker")
+    .transition(t)
+    .attr("x1", 0)
+    .attr("x2", 0)
+    .attr("y1", (d: any) => y(d.lo))
+    .attr("y2", (d: any) => y(d.hi))
+    .attr("stroke", "rgba(15,23,42,0.28)")
+    .attr("stroke-width", 2);
+
+  boxAll
+    .select<SVGLineElement>("line.cap.lo")
+    .transition(t)
+    .attr("x1", -half * 0.55)
+    .attr("x2", half * 0.55)
+    .attr("y1", (d: any) => y(d.lo))
+    .attr("y2", (d: any) => y(d.lo))
+    .attr("stroke", "rgba(15,23,42,0.28)")
+    .attr("stroke-width", 2);
+
+  boxAll
+    .select<SVGLineElement>("line.cap.hi")
+    .transition(t)
+    .attr("x1", -half * 0.55)
+    .attr("x2", half * 0.55)
+    .attr("y1", (d: any) => y(d.hi))
+    .attr("y2", (d: any) => y(d.hi))
+    .attr("stroke", "rgba(15,23,42,0.28)")
+    .attr("stroke-width", 2);
+
+  boxAll
+    .select<SVGRectElement>("rect.rect")
+    .transition(t)
+    .attr("x", -half)
+    .attr("y", (d: any) => y(d.q3))
+    .attr("width", boxW)
+    .attr("height", (d: any) => Math.max(1, y(d.q1) - y(d.q3)))
+    .attr("fill", (d: any) => col(d.album_type))
+    .attr("stroke", (d: any) => (opts.lockedType === d.album_type ? "rgba(15,23,42,0.55)" : "rgba(255,255,255,0)"))
+    .attr("stroke-width", (d: any) => (opts.lockedType === d.album_type ? 2.2 : 0));
+
+  boxAll
+    .select<SVGLineElement>("line.median")
+    .transition(t)
+    .attr("x1", -half)
+    .attr("x2", half)
+    .attr("y1", (d: any) => y(d.med))
+    .attr("y2", (d: any) => y(d.med));
+
+  boxAll
+    .select<SVGTextElement>("text.nlabel")
+    .transition(t)
+    .attr("x", 0)
+    .attr("y", (d: any) => y(d.q3) - 10)
+    .text((d: any) => `n=${d.n.toLocaleString()}`);
+
+  boxAll
+    .on("mouseenter", (evt: any, d: any) => {
+      if (!opts.lockedType) opts.onHoverType(d.album_type);
+      showTip(evt, d);
+    })
+    .on("mousemove", (evt: any, d: any) => showTip(evt, d))
+    .on("mouseleave", () => {
+      hideTip();
+      if (!opts.lockedType) opts.onLeave();
+    })
+    .on("click", (evt: any, d: any) => {
+      evt?.stopPropagation?.();
+      opts.onClickType(d.album_type);
+    });
+
+  boxSel.exit().transition(t).attr("opacity", 0).remove();
 }
